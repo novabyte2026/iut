@@ -1,0 +1,17 @@
+{
+  "name": "yt-to-drive-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "שרת חילוץ ומיזוג. מריץ yt-dlp ו-ffmpeg, ומגיש את התוצאה עם תמיכה ב-Range כדי ש-Apps Script יוכל למשוך בנתחים.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

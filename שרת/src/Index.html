@@ -1,0 +1,288 @@
+<!-- ממשק המשתמש. מוגש על ידי doGet ומדבר עם השרת דרך google.script.run. -->
+<style>
+  :root {
+    --brand: #5b4ee0;
+    --bg: #eeecfb;
+    --card: #ffffff;
+    --text: #1f1f28;
+    --muted: #6b6b7b;
+    --line: #e0def0;
+    --code-bg: #f4f3fb;
+    --ok: #1a7f4b;
+    --err: #c0362c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 48px;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.6 "Segoe UI", Rubik, Arial, sans-serif;
+    direction: rtl;
+  }
+  .card {
+    max-width: 640px;
+    margin: 0 auto;
+    background: var(--card);
+    border-radius: 10px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+    overflow: hidden;
+  }
+  .stripe { height: 10px; background: var(--brand); }
+  .inner { padding: 24px 28px 28px; }
+  h1 { margin: 0 0 4px; font-size: 26px; font-weight: 500; }
+  .sub { margin: 0 0 24px; color: var(--muted); }
+  label { display: block; margin-bottom: 6px; font-weight: 500; }
+  input[type=text], input[type=password], select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: inherit;
+    background: #fff;
+    color: inherit;
+  }
+  input:focus, select:focus { outline: 2px solid var(--brand); outline-offset: -1px; }
+  .row { margin-bottom: 18px; }
+  .cols { display: flex; gap: 12px; }
+  .cols > * { flex: 1; }
+  .hint { margin: 6px 0 0; font-size: 13px; color: var(--muted); }
+  .hint[hidden] { display: none; }
+  button {
+    padding: 10px 26px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--brand);
+    color: #fff;
+    font: inherit;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  button:disabled { opacity: .55; cursor: default; }
+  .status { margin-top: 22px; padding-top: 20px; border-top: 1px solid var(--line); }
+  .status[hidden] { display: none; }
+  .bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+  .fill { height: 100%; width: 0; background: var(--brand); transition: width .4s ease; }
+  .line { margin: 0 0 10px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .ok { color: var(--ok); font-weight: 500; }
+  .err { color: var(--err); font-weight: 500; }
+  a { color: var(--brand); }
+  .merge { margin-top: 18px; }
+  .merge[hidden] { display: none; }
+  .merge p { margin: 0 0 8px; font-size: 13px; color: var(--muted); }
+  .codewrap { display: flex; gap: 8px; align-items: stretch; }
+  code {
+    flex: 1;
+    display: block;
+    padding: 10px 12px;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font: 12px/1.5 Consolas, "Courier New", monospace;
+    direction: ltr;
+    text-align: left;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .copy { padding: 0 14px; font-size: 13px; white-space: nowrap; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16161c; --card: #22222b; --text: #ececf2; --muted: #a0a0b0;
+      --line: #34343f; --code-bg: #1b1b23; --ok: #4ec98a; --err: #ff8a7d;
+    }
+    input[type=text], input[type=password], select { background: #1b1b23; }
+  }
+</style>
+
+<div class="card">
+  <div class="stripe"></div>
+  <div class="inner">
+    <h1>הורדה מיוטיוב לדרייב</h1>
+    <p class="sub">הדביקו קישור, והקובץ יישמר בתיקייה בדרייב שלכם.</p>
+
+    <form id="form">
+      <div class="row">
+        <label for="url">קישור לסרטון</label>
+        <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=..."
+               autocomplete="off" required>
+      </div>
+
+      <div class="row cols">
+        <div>
+          <label for="mode">פורמט</label>
+          <select id="mode">
+            <option value="video">וידאו</option>
+            <option value="audio">אודיו בלבד</option>
+          </select>
+        </div>
+        <div>
+          <label for="quality">איכות</label>
+          <select id="quality">
+            <? for (var i = 0; i < qualities.length; i++) { ?>
+              <option value="<?= qualities[i] ?>"
+                <?= qualities[i] === defaultQuality ? 'selected' : '' ?>><?= qualities[i] ?>p</option>
+            <? } ?>
+          </select>
+        </div>
+      </div>
+
+      <p class="hint" id="hint" hidden>
+        מעל 720p יוטיוב מגישה וידאו ואודיו בנפרד. תקבלו שני קבצים בתיקייה,
+        עם פקודת מיזוג מוכנה.
+      </p>
+
+      <? if (requirePassword) { ?>
+      <div class="row" style="margin-top:18px">
+        <label for="password">סיסמה</label>
+        <input type="password" id="password" autocomplete="current-password" required>
+      </div>
+      <? } ?>
+
+      <div style="margin-top:18px"><button type="submit" id="go">שלח</button></div>
+    </form>
+
+    <div class="status" id="status" hidden>
+      <p class="line" id="text"></p>
+      <div class="bar"><div class="fill" id="fill"></div></div>
+      <p class="muted" id="detail"></p>
+
+      <div class="merge" id="merge" hidden>
+        <p>למיזוג לקובץ אחד, מהתיקייה שאליה הורדתם את שני הקבצים:</p>
+        <div class="codewrap">
+          <code id="cmd"></code>
+          <button type="button" class="copy" id="copy">העתק</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var form = document.getElementById('form');
+  var go = document.getElementById('go');
+  var box = document.getElementById('status');
+  var text = document.getElementById('text');
+  var fill = document.getElementById('fill');
+  var detail = document.getElementById('detail');
+  var hint = document.getElementById('hint');
+  var mergeBox = document.getElementById('merge');
+  var cmd = document.getElementById('cmd');
+  var modeSel = document.getElementById('mode');
+  var qualitySel = document.getElementById('quality');
+  var timer = null;
+
+  var LABELS = {
+    queued: 'ממתין בתור...',
+    resolving: 'מאתר את הסרטון...',
+    preparing: 'השרת מוריד וממזג...',
+    transferring: 'מעביר לדרייב...',
+    done: 'הושלם',
+    error: 'נכשל',
+    missing: 'העבודה לא נמצאה'
+  };
+  var KINDS = { video: 'רצועת וידאו', audio: 'רצועת אודיו', media: '' };
+  var STAGES = {
+    metadata: 'קורא פרטי סרטון',
+    queued: 'ממתין בתור בשרת',
+    download: 'מוריד',
+    merge: 'ממזג וידאו ואודיו'
+  };
+
+  // מסבירים מראש למה תתקבל תיקייה ולא קובץ, כדי שזו לא תהיה הפתעה בסוף.
+  function updateHint() {
+    var high = parseInt(qualitySel.value, 10) > 720;
+    hint.hidden = !(high && modeSel.value === 'video');
+    qualitySel.disabled = modeSel.value === 'audio';
+  }
+  modeSel.addEventListener('change', updateHint);
+  qualitySel.addEventListener('change', updateHint);
+  updateHint();
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var pw = document.getElementById('password');
+
+    go.disabled = true;
+    box.hidden = false;
+    mergeBox.hidden = true;
+    text.textContent = 'שולח...';
+    text.className = 'line';
+    detail.textContent = '';
+    fill.style.width = '0';
+
+    google.script.run
+      .withSuccessHandler(function (job) { poll(job.id); })
+      .withFailureHandler(fail)
+      .submitRequest({
+        url: document.getElementById('url').value,
+        mode: modeSel.value,
+        quality: qualitySel.value,
+        password: pw ? pw.value : ''
+      });
+  });
+
+  // סקר את השרת כל 3 שניות. ההורדה ממשיכה בצד השרת גם אם סוגרים את החלון,
+  // ולכן זו רק תצוגה - לא מנוע.
+  function poll(id) {
+    clearInterval(timer);
+    timer = setInterval(function () {
+      google.script.run.withSuccessHandler(render).withFailureHandler(fail).jobStatus(id);
+    }, 3000);
+  }
+
+  function render(s) {
+    text.textContent = LABELS[s.status] || s.status;
+    fill.style.width = s.percent + '%';
+
+    var bits = [];
+    if (s.title) bits.push(s.title);
+    if (s.status === 'preparing') {
+      if (STAGES[s.stage]) bits.push(STAGES[s.stage]);
+    } else if (s.totalMB) {
+      bits.push(s.totalMB + 'MB');
+    }
+    if (s.status === 'transferring' && s.partCount > 1) {
+      bits.push((KINDS[s.partKind] || '') + ' (' + (s.partIndex + 1) + '/' + s.partCount + ')');
+    }
+    if ((s.status === 'transferring' || s.status === 'preparing') && s.percent) {
+      bits.push(s.percent + '%');
+    }
+    detail.textContent = bits.filter(Boolean).join(' · ');
+
+    if (s.status === 'done') {
+      clearInterval(timer);
+      go.disabled = false;
+      text.className = 'line ok';
+      var label = s.strategy === 'dual' ? 'פתחו את התיקייה בדרייב' : 'פתחו את הקובץ בדרייב';
+      text.innerHTML = 'הושלם. <a href="' + s.driveUrl + '" target="_blank" rel="noopener">' +
+                       label + '</a>';
+      if (s.mergeCommand) {
+        cmd.textContent = s.mergeCommand;
+        mergeBox.hidden = false;
+      }
+    } else if (s.status === 'error' || s.status === 'missing') {
+      clearInterval(timer);
+      go.disabled = false;
+      text.className = 'line err';
+      detail.textContent = s.error || '';
+    }
+  }
+
+  function fail(err) {
+    clearInterval(timer);
+    go.disabled = false;
+    box.hidden = false;
+    text.className = 'line err';
+    text.textContent = err && err.message ? err.message : 'שגיאה לא צפויה';
+    fill.style.width = '0';
+  }
+
+  document.getElementById('copy').addEventListener('click', function () {
+    var btn = this;
+    navigator.clipboard.writeText(cmd.textContent).then(function () {
+      btn.textContent = 'הועתק';
+      setTimeout(function () { btn.textContent = 'העתק'; }, 1500);
+    });
+  });
+</script>
